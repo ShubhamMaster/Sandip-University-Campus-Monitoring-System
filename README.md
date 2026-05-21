@@ -4,11 +4,18 @@ People Counting in Real-Time using live video stream/IP camera in OpenCV.
 > NOTE: This is an improvement/modification to https://www.pyimagesearch.com/2018/08/13/opencv-people-counter/
 
 <div align="center">
-<video width="550" controls>
-    <source src="https://shubham.civoranexus.com/images/projects/AI-Powered%20Campus%20Monitoring%20System/gate-in-out.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-</video>
-<p>Live demo</p>
+    <!-- Video player (may be blocked/stripped on some markdown renderers like GitHub) -->
+    <video width="550" controls poster="https://i.imgur.com/SaF1kk3.gif">
+        <source src="https://shubham.civoranexus.com/images/projects/AI-Powered%20Campus%20Monitoring%20System/gate-in-out.mp4" type="video/mp4">
+        Your browser does not support the video tag. Click the thumbnail below to view the video.
+    </video>
+    <p>Live demo</p>
+    <!-- GitHub-friendly fallback: linked thumbnail (GitHub strips video tags) -->
+    <p>
+        <a href="https://shubham.civoranexus.com/images/projects/AI-Powered%20Campus%20Monitoring%20System/gate-in-out.mp4">
+            <img src="https://i.imgur.com/SaF1kk3.gif" width="550" alt="Live demo - click to open video" />
+        </a>
+    </p>
 </div>
 
 - The primary aim is to use the project as a business perspective, ready to scale.
