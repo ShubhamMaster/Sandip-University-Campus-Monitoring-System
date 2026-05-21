@@ -4,7 +4,10 @@ People Counting in Real-Time using live video stream/IP camera in OpenCV.
 > NOTE: This is an improvement/modification to https://www.pyimagesearch.com/2018/08/13/opencv-people-counter/
 
 <div align="center">
-<img src=https://imgur.com/SaF1kk3.gif" width=550>
+<video width="550" controls>
+    <source src="https://shubham.civoranexus.com/images/projects/AI-Powered%20Campus%20Monitoring%20System/gate-in-out.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+</video>
 <p>Live demo</p>
 </div>
 
@@ -184,6 +187,11 @@ if num_seconds > 28800:
 - Schedule: https://pypi.org/project/schedule/
 
 ---
+
+### Original Project
+
+This repository is derived from the original project by saimj7 (Sai_Mj). The original
+author and copyright are preserved below as required by the MIT license.
 
 *saimj7/ 19-08-2020 - © <a href="http://saimj7.github.io" target="_blank">Sai_Mj</a>.*
 
