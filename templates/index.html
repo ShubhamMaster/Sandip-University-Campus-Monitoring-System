@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gate Entry / Exit Portal — Sandip University</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], mono: ['"JetBrains Mono"', 'monospace'] },
+                    colors: {
+                        brand:   { 50:'#eef2ff', 100:'#e0e7ff', 200:'#c7d2fe', 500:'#6366f1', 600:'#4f46e5', 700:'#4338ca' },
+                        success: { 50:'#ecfdf5', 100:'#d1fae5', 500:'#10b981', 600:'#059669', 700:'#047857' },
+                        danger:  { 50:'#fef2f2', 100:'#fee2e2', 500:'#ef4444', 600:'#dc2626' },
+                        warn:    { 50:'#fffbeb', 100:'#fef3c7', 500:'#f59e0b', 600:'#d97706' },
+                        info:    { 50:'#eff6ff', 100:'#dbeafe', 500:'#3b82f6', 600:'#2563eb' },
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        *, *::before, *::after { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; }
+
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .adj-btn { display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 4px; border-radius:8px; border:1px solid #e2e8f0; background:#f8fafc; color:#475569; font-weight:500; cursor:pointer; transition:all .15s; }
+        .adj-btn:hover { background:#eff6ff; border-color:#93c5fd; color:#2563eb; }
+
+        .video-wrap { position: relative; background: #0f172a; border-radius: 14px; overflow: hidden; contain: layout style paint; aspect-ratio: 16/9; }
+        .video-wrap canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; will-change: contents; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+        input[type=range] { -webkit-appearance: none; height: 6px; border-radius: 3px; background: #e2e8f0; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #4f46e5; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+
+        @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; animation: livePulse 1.3s infinite; }
+
+        @keyframes alertBlink { 0%,100%{opacity:1} 50%{opacity:0.85} }
+        .alert-blink { animation: alertBlink 1.5s infinite; }
+
+        /* HUD overlay badges on video */
+        .hud { position: absolute; bottom: 0; left: 0; right: 0; pointer-events: none;
+               background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%);
+               padding: 32px 14px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+        .hud-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+                     border-radius: 6px; font-weight: 700; font-size: 11px; letter-spacing: 0.02em; }
+
+        .campus-vehicle-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; transition: background 0.15s; }
+        .campus-vehicle-row:hover { background: #f8fafc; }
+
+        /* Left column fills available space */
+        .left-col { flex: 1; min-width: 0; }
+        .video-container { width: 100%; }
+        .video-wrap img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+        /* Desktop: side-by-side layout */
+        @media (min-width: 1024px) {
+            .sidebar { width: 340px; flex-shrink: 0; }
+        }
+        /* Tablet & mobile: stacked layout */
+        @media (max-width: 1023px) {
+            .main-grid { flex-direction: column !important; }
+            .left-col { max-width: 100%; }
+            .sidebar { width: 100% !important; max-width: 100% !important; }
+        }
+        /* Small mobile tweaks */
+        @media (max-width: 480px) {
+            .card { border-radius: 10px; }
+            .video-wrap { border-radius: 10px; }
+            .hud { padding: 20px 8px 8px; gap: 4px; }
+            .hud-badge { padding: 3px 7px; font-size: 10px; gap: 3px; }
+            .adj-btn { padding: 6px 2px; }
+            .adj-btn .text-\[10px\] { font-size: 9px; }
+        }
+
+        /* Fullscreen overlay */
+        .fs-overlay { position: fixed; inset: 0; z-index: 9999; background: #0a0a0a; display: none; flex-direction: column; }
+        .fs-overlay.active { display: flex; }
+        .fs-overlay .fs-video-area { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; }
+        .fs-overlay .fs-video-area img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+        .fs-overlay .fs-video-area canvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); pointer-events: none; }
+        .fs-overlay .fs-bottom { background: rgba(15,23,42,0.97); border-top: 1px solid rgba(255,255,255,0.08); padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+        .fs-stat { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; }
+        .fs-close { position: absolute; top: 16px; right: 16px; z-index: 10; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s; }
+        .fs-close:hover { background: rgba(255,255,255,0.2); }
+        .fs-live { position: absolute; top: 16px; left: 16px; z-index: 10; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.75); border-radius: 8px; padding: 5px 12px; }
+        .fs-time { position: absolute; top: 16px; left: 120px; z-index: 10; background: rgba(0,0,0,0.65); border-radius: 8px; padding: 5px 12px; }
+        .fs-campus { background: rgba(15,23,42,0.95); border-top: 1px solid rgba(255,255,255,0.06); padding: 8px 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        .fs-campus-item { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; background: rgba(255,255,255,0.06); }
+
+        /* Mobile fullscreen */
+        @media (max-width: 640px) {
+            .fs-bottom { padding: 8px 10px; gap: 6px; }
+            .fs-stat { font-size: 10px; padding: 4px 8px; gap: 4px; }
+            .fs-close { top: 10px; right: 10px; width: 36px; height: 36px; }
+            .fs-live { top: 10px; left: 10px; padding: 4px 8px; }
+            .fs-time { top: 10px; left: 100px; padding: 4px 8px; }
+            .fs-campus { padding: 6px 10px; gap: 6px; }
+            .fs-campus-item { font-size: 10px; padding: 3px 7px; }
+        }
+
+        /* Safe area for notched phones */
+        @supports (padding: env(safe-area-inset-bottom)) {
+            .fs-campus { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+            body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- ===== NAVBAR ===== -->
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-[1600px] mx-auto px-3 sm:px-6 h-12 sm:h-14 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <img src="/static/img/sandip-logo.png" alt="Sandip University"
+                     class="h-7 sm:h-9 w-auto rounded-lg object-contain"
+                     onerror="this.style.display='none'" />
+                <div>
+                    <h1 class="text-xs sm:text-sm font-bold text-slate-800 leading-tight">Gate Entry / Exit Portal</h1>
+                    <p class="text-[9px] sm:text-[10px] text-slate-400 font-medium hidden sm:block">Sandip University &bull; YOLOv8 Real-Time Detection</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 sm:gap-4">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full" id="statusDot" style="background:#94a3b8"></span>
+                    <span id="statusText" class="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">Idle</span>
+                </div>
+                <span id="clock" class="text-[10px] sm:text-xs font-mono text-slate-400">--:--</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Alert toasts (fixed overlay; do not affect layout) -->
+    <div class="fixed top-16 right-3 sm:right-6 z-[70] w-[min(92vw,420px)] space-y-2 pointer-events-none">
+        <div id="alertBanner" class="hidden card border-danger-500/40 bg-danger-50 p-3 flex items-center gap-3 alert-blink shadow-lg pointer-events-auto">
+            <div class="w-8 h-8 rounded-full bg-danger-100 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4 text-danger-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+            </div>
+            <div>
+                <p class="text-danger-700 font-bold text-sm">Threshold Exceeded</p>
+                <p class="text-danger-600/70 text-xs">Current occupancy exceeds the allowed limit.</p>
+            </div>
+        </div>
+        <div id="rushBanner" class="hidden card border-warn-500/40 bg-warn-50 p-3 flex items-center gap-3 alert-blink shadow-lg pointer-events-auto">
+            <div class="w-8 h-8 rounded-full bg-warn-100 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4 text-warn-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
+            </div>
+            <div>
+                <p class="text-warn-700 font-bold text-sm">&#9888; Crowd Rush Detected</p>
+                <p class="text-warn-600/70 text-xs"><span id="rushCount" class="font-mono font-bold">0</span> entries within <span id="rushWindowLabel" class="font-mono font-bold">10</span>s</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MAIN LAYOUT ===== -->
+    <main class="max-w-[1600px] mx-auto px-3 sm:px-6 py-3 sm:py-4">
+        <div class="flex flex-col lg:flex-row gap-4 sm:gap-5 main-grid">
+
+            <!-- ====== LEFT: Video + Stats ====== -->
+            <div class="min-w-0 space-y-4 left-col">
+
+                <!-- Video Player -->
+                <div class="video-container">
+                <div class="video-wrap" id="videoFrame">
+                    <div id="streamPlaceholder" class="flex flex-col items-center justify-center" style="aspect-ratio:var(--cam-ratio, 16/9); background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%)">
+                        <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-3">
+                            <svg class="w-6 h-6 sm:w-7 sm:h-7 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+                        </div>
+                        <p class="text-white/80 text-xs sm:text-sm font-semibold">No Camera Feed</p>
+                        <p class="text-white/40 text-[10px] sm:text-xs mt-1">Select a camera and press Start</p>
+                    </div>
+                    <img id="streamImage" class="hidden" alt="Live Feed" />
+                    <canvas id="detectionCanvas" class="hidden"></canvas>
+                    <!-- LIVE badge -->
+                    <div id="liveBadge" class="hidden absolute top-3 left-3 flex items-center gap-1.5 bg-black/70 rounded-md px-2.5 py-1">
+                        <span class="live-dot"></span>
+                        <span class="text-white text-[10px] font-bold tracking-wider uppercase">Live</span>
+                    </div>
+                    <!-- Time overlay -->
+                    <div id="timeOverlay" class="hidden absolute top-3 right-3 bg-black/60 rounded-md px-2.5 py-1">
+                        <span id="overlayTime" class="text-white text-[10px] font-mono">--:--</span>
+                    </div>
+                    <!-- Fullscreen button -->
+                    <button id="btnFullscreen" onclick="openFullscreen()" class="hidden absolute bottom-3 right-3 z-10 w-8 h-8 rounded-lg bg-black/50 hover:bg-black/70 backdrop-blur-sm border border-white/10 text-white flex items-center justify-center cursor-pointer transition-all" title="Fullscreen">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
+                    </button>
+                    <!-- HUD Stats on video -->
+                    <div id="videoHUD" class="hud hidden">
+                        <span class="hud-badge bg-emerald-500/25 text-emerald-300">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+                            IN <span id="hudEntered" class="font-mono">0</span>
+                        </span>
+                        <span class="hud-badge bg-red-500/25 text-red-300">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                            OUT <span id="hudExited" class="font-mono">0</span>
+                        </span>
+                        <span class="hud-badge bg-blue-500/25 text-blue-300">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128H9"/></svg>
+                            INSIDE <span id="hudInside" class="font-mono">0</span>
+                        </span>
+                        <span class="hud-badge bg-violet-500/25 text-violet-300">
+                            LIMIT <span id="hudThreshold" class="font-mono">{{ threshold }}</span>
+                        </span>
+                    </div>
+                </div>
+                </div><!-- end video-container -->
+
+                
+
+                <!-- Detection Type Breakdown: IN / OUT per type -->
+                <div id="typeBreakdown" class="hidden card p-3 sm:p-4">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Detection Breakdown</p>
+                    <div id="typeGrid" class="grid grid-cols-3 sm:grid-cols-6 gap-2"></div>
+                </div>
+
+                <!-- Occupancy Chart -->
+                <div class="card p-3 sm:p-4">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Occupancy Over Time</p>
+                    <div class="h-[130px] sm:h-[170px]"><canvas id="occupancyChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- ====== RIGHT SIDEBAR ====== -->
+            <div class="space-y-4 sidebar">
+
+                <!-- Camera Source -->
+                <div class="card p-4 space-y-3">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Camera Source</p>
+                    <select id="cameraSelect" class="w-full rounded-lg border border-slate-200 bg-slate-50 text-slate-700 px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 truncate">
+                        <option value="">Detecting cameras...</option>
+                    </select>
+                    <div class="flex gap-2">
+                        <button id="btnStart" onclick="startStream()" class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-lg transition-all flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/></svg>
+                            Start
+                        </button>
+                        <button id="btnStop" onclick="stopStream()" class="hidden flex-1 px-4 py-2.5 bg-danger-600 hover:bg-danger-500 text-white font-semibold text-sm rounded-lg transition-all flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><rect x="4" y="4" width="12" height="12" rx="1.5"/></svg>
+                            Stop
+                        </button>
+                        <button onclick="refreshCameras()" class="px-3 py-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-brand-600 transition-all" title="Refresh cameras">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Stats -->
+                <div id="adjustPanel" class="hidden card p-4 space-y-3">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Live Stats</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="p-2.5 rounded-xl bg-success-50">
+                            <p class="text-[10px] text-success-600/70 font-semibold uppercase tracking-wider">Entered</p>
+                            <p id="statEntered" class="text-xl font-bold font-mono text-success-700 leading-tight">0</p>
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-danger-50">
+                            <p class="text-[10px] text-danger-600/70 font-semibold uppercase tracking-wider">Exited</p>
+                            <p id="statExited" class="text-xl font-bold font-mono text-danger-600 leading-tight">0</p>
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-info-50">
+                            <p class="text-[10px] text-info-600/70 font-semibold uppercase tracking-wider">Inside</p>
+                            <p id="statInside" class="text-xl font-bold font-mono text-info-600 leading-tight">0</p>
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-brand-50">
+                            <p class="text-[10px] text-brand-600/70 font-semibold uppercase tracking-wider">Threshold</p>
+                            <p id="thresholdDisplay" class="text-xl font-bold font-mono text-brand-600 leading-tight">{{ threshold }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Currently in Campus -->
+                <div id="campusCard" class="card p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Currently in Campus</p>
+                        <span id="campusTotal" class="text-xs font-bold font-mono text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">0</span>
+                    </div>
+                    <div id="campusList" class="space-y-0.5">
+                        <p class="text-xs text-slate-400 italic py-3 text-center">No detections yet</p>
+                    </div>
+                </div>
+
+                <!-- Threshold -->
+                <div class="card p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Max Occupancy Threshold</p>
+                        <span id="thresholdValue" class="text-sm font-bold font-mono text-brand-600">{{ threshold }}</span>
+                    </div>
+                    <input id="thresholdSlider" type="range" min="1" max="500" value="{{ threshold }}" class="w-full"
+                           oninput="updateThresholdLabel(this.value)" onchange="setThreshold(this.value)" />
+                    <p class="text-[11px] text-slate-400">Alert triggers when occupancy exceeds this value.</p>
+                </div>
+
+                <!-- Rush Control -->
+                <div class="card p-4 space-y-4">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Crowd Rush Detection</p>
+                    <div class="space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] text-slate-500 font-medium">Rush Limit</span>
+                            <span id="rushLimitLabel" class="text-xs font-bold font-mono text-danger-600">{{ rush_limit }}</span>
+                        </div>
+                        <input id="rushLimitSlider" type="range" min="2" max="50" value="{{ rush_limit }}" class="w-full"
+                               oninput="document.getElementById('rushLimitLabel').textContent=this.value" onchange="setRushLimit()" />
+                    </div>
+                    <div class="space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] text-slate-500 font-medium">Time Window</span>
+                            <span class="text-xs font-mono text-slate-500"><span id="rushWindowValue" class="font-bold text-info-600">{{ rush_window }}</span>s</span>
+                        </div>
+                        <input id="rushWindowSlider" type="range" min="3" max="60" value="{{ rush_window }}" class="w-full"
+                               oninput="document.getElementById('rushWindowValue').textContent=this.value" onchange="setRushLimit()" />
+                    </div>
+                    <p class="text-[11px] text-slate-400">Alerts when entries exceed limit within the time window.</p>
+                </div>
+
+                <!-- Stream Info -->
+                <div id="cameraInfoCard" class="hidden card p-4 space-y-2">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Stream Info</p>
+                    <div class="space-y-1.5 text-sm">
+                        <div class="flex justify-between"><span class="text-slate-400">Camera</span><span id="infoCamera" class="font-medium text-slate-700 truncate max-w-[180px] text-right">&mdash;</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">Status</span><span id="infoStatus" class="font-medium text-slate-700">Idle</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">Model</span><span class="font-medium text-slate-700">YOLOv8n</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">Resolution</span><span class="font-medium text-slate-700">720p</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ===== FULLSCREEN OVERLAY ===== -->
+    <div id="fsOverlay" class="fs-overlay">
+        <button class="fs-close" onclick="closeFullscreen()" title="Exit Fullscreen">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        <div class="fs-live">
+            <span class="live-dot"></span>
+            <span class="text-white text-[11px] font-bold tracking-wider uppercase">Live</span>
+        </div>
+        <div class="fs-time">
+            <span id="fsTime" class="text-white text-[11px] font-mono">--:--</span>
+        </div>
+        <div class="fs-video-area">
+            <img id="fsImage" alt="Fullscreen Feed" />
+            <canvas id="fsCanvas"></canvas>
+        </div>
+        <div class="fs-bottom">
+            <span class="fs-stat bg-emerald-500/20 text-emerald-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg> Entered <span id="fsEntered" class="font-mono">0</span></span>
+            <span class="fs-stat bg-red-500/20 text-red-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg> Exited <span id="fsExited" class="font-mono">0</span></span>
+            <span class="fs-stat bg-blue-500/20 text-blue-400"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128H9"/></svg> Inside <span id="fsInside" class="font-mono">0</span></span>
+            <span class="fs-stat bg-violet-500/20 text-violet-400">Threshold <span id="fsThreshold" class="font-mono">{{ threshold }}</span></span>
+            <span id="fsAlert" class="hidden fs-stat bg-red-500/30 text-red-300 alert-blink">&#9888; THRESHOLD EXCEEDED</span>
+            <span id="fsRush" class="hidden fs-stat bg-yellow-500/30 text-yellow-300 alert-blink">&#9888; RUSH: <span id="fsRushCount" class="font-mono">0</span> in <span id="fsRushWin" class="font-mono">0</span>s</span>
+        </div>
+        <div class="fs-campus" id="fsCampusBar"></div>
+    </div>
+
+    <audio id="alertAudio" preload="auto" src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVoGAACAgICAgICAgICAgIA=" loop></audio>
+
+<script>
+    let activeCameraIndex = null;
+    let availableCameras = [];
+    let rafId;
+    let alertPlaying = false;
+    let isFullscreen = false;
+    let fsRafId = null;
+    const socket = io();
+
+    let trackedObjs = {};
+    let frameW = 0, frameH = 0;
+    let lineY = 0;
+    let gateLines = [];
+    let lastDetSeq = -1;
+    const LERP = 0.22;
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    // ---- Fullscreen ----
+    function openFullscreen() {
+        if (activeCameraIndex === null) return;
+        isFullscreen = true;
+        const overlay = document.getElementById('fsOverlay');
+        overlay.classList.add('active');
+        document.getElementById('fsImage').src = `/video_feed/${activeCameraIndex}`;
+        document.body.style.overflow = 'hidden';
+        if (!fsRafId) startFsRenderLoop();
+    }
+    function closeFullscreen() {
+        isFullscreen = false;
+        const overlay = document.getElementById('fsOverlay');
+        overlay.classList.remove('active');
+        document.getElementById('fsImage').src = '';
+        document.body.style.overflow = '';
+        if (fsRafId) { cancelAnimationFrame(fsRafId); fsRafId = null; }
+        const fc = document.getElementById('fsCanvas');
+        fc.getContext('2d').clearRect(0, 0, fc.width, fc.height);
+    }
+    // ESC key to close
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && isFullscreen) closeFullscreen(); });
+
+    function startFsRenderLoop() {
+        const canvas = document.getElementById('fsCanvas');
+        const c = canvas.getContext('2d', {alpha: true});
+        let _cw = 0, _ch = 0;
+        const _font = '600 12px "JetBrains Mono",monospace';
+        function frame() {
+            fsRafId = requestAnimationFrame(frame);
+            const img = document.getElementById('fsImage');
+            if (!img || !img.naturalWidth) return;
+            const rect = img.getBoundingClientRect();
+            const dw = (rect.width + 0.5) | 0, dh = (rect.height + 0.5) | 0;
+            if (_cw !== dw || _ch !== dh) { canvas.width = _cw = dw; canvas.height = _ch = dh; canvas.style.width = dw + 'px'; canvas.style.height = dh + 'px'; }
+            c.clearRect(0, 0, dw, dh);
+            if (!frameW || !frameH) return;
+            const sx = dw/frameW, sy = dh/frameH;
+
+            // Multi-line gate guides
+            drawGateGuides(c, dw, sy);
+
+            c.font = _font;
+            for (const id of Object.keys(trackedObjs)) {
+                const o = trackedObjs[id];
+                const alpha = o.age > 0 ? Math.max(0, 1-o.age/6) : 1;
+                if (alpha <= 0) continue;
+                const bx1=o.x1*sx, by1=o.y1*sy, bw=(o.x2-o.x1)*sx, bh=(o.y2-o.y1)*sy;
+                const cc = getBoxColor(o);
+                const counted = (o.ev === 'IN' || o.ev === 'OUT');
+
+                // Simple box — no shadow, no corners
+                c.strokeStyle=`rgba(${cc},${0.8*alpha})`; c.lineWidth=2;
+                c.strokeRect(bx1, by1, bw, bh);
+                if (counted) {
+                    c.fillStyle=`rgba(${cc},${0.16*alpha})`;
+                    c.fillRect(bx1, by1, bw, bh);
+                }
+
+                // Label pill
+                const label = counted ? `${o.ev} #${id}` : `${o.cls||'Unidentified'} #${id}`;
+                const tw = c.measureText(label).width;
+                const px=bx1, py=by1-18;
+                c.fillStyle=`rgba(${cc},${0.85*alpha})`;
+                c.fillRect(px, py, tw+10, 16);
+                c.fillStyle=`rgba(255,255,255,${0.9*alpha})`;
+                c.textBaseline='middle'; c.fillText(label, px+5, py+8);
+            }
+        }
+        frame();
+    }
+
+    function updateFsStats(d) {
+        document.getElementById('fsEntered').textContent = d.entered;
+        document.getElementById('fsExited').textContent = d.exited;
+        document.getElementById('fsInside').textContent = d.inside;
+        document.getElementById('fsThreshold').textContent = d.threshold;
+        document.getElementById('fsTime').textContent =
+            new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}).toUpperCase();
+        if (d.threshold_exceeded) { document.getElementById('fsAlert').classList.remove('hidden'); }
+        else { document.getElementById('fsAlert').classList.add('hidden'); }
+        if (d.rush_detected) {
+            document.getElementById('fsRush').classList.remove('hidden');
+            document.getElementById('fsRushCount').textContent = d.recent_entries;
+            document.getElementById('fsRushWin').textContent = d.rush_window;
+        } else { document.getElementById('fsRush').classList.add('hidden'); }
+        // Campus bar
+        const ti = d.type_inside || {};
+        const bar = document.getElementById('fsCampusBar');
+        let html = '<span class="text-[10px] text-white/40 font-semibold uppercase tracking-wider mr-2">In Campus:</span>';
+        let any = false;
+        for (const t of ['Person','Car','Bus','Motorcycle','Bicycle','Truck']) {
+            if (!ti[t]) continue; any = true;
+            const m = TYPE_META[t];
+            html += `<span class="fs-campus-item" style="color:${m.hex}">${m.icon} ${ti[t]} ${t}${ti[t]>1?'s':''}</span>`;
+        }
+        bar.innerHTML = any ? html : '';
+        bar.style.display = any ? '' : 'none';
+    }
+
+    // Clock
+    setInterval(() => {
+        document.getElementById('clock').textContent =
+            new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }).toUpperCase();
+    }, 1000);
+
+    // Chart
+    const ctx = document.getElementById('occupancyChart').getContext('2d');
+    const occupancyChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Occupancy', data: [],
+            borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.08)',
+            borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 8 } },
+                y: { display: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, color: '#94a3b8' }, beginAtZero: true }
+            },
+        },
+    });
+
+    function setStatus(text, color) {
+        document.getElementById('statusText').textContent = text;
+        const colors = { green:'#10b981', blue:'#3b82f6', red:'#ef4444', gray:'#94a3b8' };
+        document.getElementById('statusDot').style.background = colors[color] || colors.gray;
+    }
+
+    // ---- Camera discovery ----
+    async function refreshCameras() {
+        try {
+            const resp = await fetch('/api/cameras');
+            availableCameras = await resp.json();
+            const sel = document.getElementById('cameraSelect');
+            sel.innerHTML = '';
+            if (availableCameras.length === 0) {
+                sel.innerHTML = '<option value="">No cameras found</option>';
+            } else {
+                availableCameras.forEach(c => {
+                    const label = `${c.name} (${c.width}\u00D7${c.height})`;
+                    sel.innerHTML += `<option value="${c.index}">${label}</option>`;
+                });
+            }
+        } catch (e) {
+            document.getElementById('cameraSelect').innerHTML = '<option value="">Error detecting</option>';
+        }
+    }
+    refreshCameras();
+
+    function showAlert() { document.getElementById('alertBanner').classList.remove('hidden'); }
+    function hideAlert() { document.getElementById('alertBanner').classList.add('hidden'); alertPlaying = false; }
+    function playAlertSound() { try { document.getElementById('alertAudio').play(); } catch(e){} }
+
+    // ---- Start / Stop ----
+    function startStream() {
+        const sel = document.getElementById('cameraSelect');
+        if (!sel.value && sel.value !== '0') return;
+        activeCameraIndex = parseInt(sel.value);
+
+        // Set aspect ratio from selected camera
+        const cam = availableCameras.find(c => c.index === activeCameraIndex);
+        // Backend always outputs 1280x720 (16:9), enforce on frontend
+        document.getElementById('videoFrame').style.setProperty('--cam-ratio', '16/9');
+        document.getElementById('streamPlaceholder').style.aspectRatio = '16/9';
+
+        const img = document.getElementById('streamImage');
+        img.src = `/video_feed/${activeCameraIndex}`;
+        img.classList.remove('hidden');
+        document.getElementById('streamPlaceholder').classList.add('hidden');
+        document.getElementById('detectionCanvas').classList.remove('hidden');
+        document.getElementById('liveBadge').classList.remove('hidden');
+        document.getElementById('timeOverlay').classList.remove('hidden');
+        document.getElementById('videoHUD').classList.remove('hidden');
+        document.getElementById('btnFullscreen').classList.remove('hidden');
+        document.getElementById('btnStart').classList.add('hidden');
+        document.getElementById('btnStop').classList.remove('hidden');
+        document.getElementById('cameraInfoCard').classList.remove('hidden');
+
+        // Show adjust panel and reset transform state
+        document.getElementById('adjustPanel').classList.remove('hidden');
+        curRotation = 0; curFlipH = false; curFlipV = false;
+        updateAdjustStatus();
+
+        // Set camera name in info card
+        document.getElementById('infoCamera').textContent = cam ? cam.name : `Camera ${activeCameraIndex}`;
+        document.getElementById('infoStatus').textContent = 'Streaming';
+
+        setStatus('Connecting', 'blue');
+        setTimeout(() => setStatus('Live', 'green'), 2000);
+
+        trackedObjs = {};
+        lastDetSeq = -1;
+        if (!rafId) startRenderLoop();
+    }
+
+    function stopStream() {
+        if (activeCameraIndex !== null) fetch(`/api/stop/${activeCameraIndex}`, { method: 'POST' });
+        document.getElementById('streamImage').classList.add('hidden');
+        document.getElementById('streamImage').src = '';
+        document.getElementById('streamPlaceholder').classList.remove('hidden');
+        document.getElementById('detectionCanvas').classList.add('hidden');
+        document.getElementById('liveBadge').classList.add('hidden');
+        document.getElementById('timeOverlay').classList.add('hidden');
+        document.getElementById('videoHUD').classList.add('hidden');
+        document.getElementById('btnFullscreen').classList.add('hidden');
+        if (isFullscreen) closeFullscreen();
+        document.getElementById('btnStart').classList.remove('hidden');
+        document.getElementById('btnStop').classList.add('hidden');
+        document.getElementById('cameraInfoCard').classList.add('hidden');
+        document.getElementById('adjustPanel').classList.add('hidden');
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+        trackedObjs = {};
+        lastDetSeq = -1;
+        gateLines = [];
+        activeCameraIndex = null;
+        setStatus('Idle', 'gray');
+        hideAlert();
+        document.getElementById('rushBanner').classList.add('hidden');
+        const c = document.getElementById('detectionCanvas');
+        c.getContext('2d').clearRect(0, 0, c.width, c.height);
+    }
+
+    // ---- Socket.IO: Detection data ----
+    socket.on('detections', data => {
+        if (activeCameraIndex === null) return;
+        const seq = typeof data.seq === 'number' ? data.seq : -1;
+        if (seq >= 0 && seq < lastDetSeq) return;
+        if (seq >= 0) lastDetSeq = seq;
+        frameW = data.s[0] || 1; frameH = data.s[1] || 1;
+        lineY = (typeof data.ly === 'number' && data.ly > 0) ? data.ly : (frameH / 2);
+        gateLines = Array.isArray(data.lys) ? data.lys : [];
+        if (!gateLines.length) {
+            gateLines = [{ label: 'GATE', y: lineY, lvl: 0 }];
+        }
+        const activeIds = new Set();
+        const dets = data.d || [], rects = data.r || [];
+
+        // dets[i] and rects[i] are 1:1 matched from backend
+        for (let i = 0; i < dets.length; i++) {
+            const det = dets[i], id = det.id;
+            const r = rects[i] || null;
+            activeIds.add(id);
+            if (trackedObjs[id]) {
+                trackedObjs[id].tx = det.cx; trackedObjs[id].ty = det.cy;
+                if (r) { trackedObjs[id].tx1=r[0]; trackedObjs[id].ty1=r[1]; trackedObjs[id].tx2=r[2]; trackedObjs[id].ty2=r[3]; }
+                trackedObjs[id].age = 0;
+                trackedObjs[id].cls = det.cls || trackedObjs[id].cls || 'Unidentified';
+                trackedObjs[id].ev = det.ev || trackedObjs[id].ev || null;
+            } else {
+                trackedObjs[id] = {
+                    cx:det.cx, cy:det.cy, tx:det.cx, ty:det.cy,
+                    x1:r?r[0]:det.cx-20, y1:r?r[1]:det.cy-40,
+                    x2:r?r[2]:det.cx+20, y2:r?r[3]:det.cy+40,
+                    tx1:r?r[0]:det.cx-20, ty1:r?r[1]:det.cy-40,
+                    tx2:r?r[2]:det.cx+20, ty2:r?r[3]:det.cy+40,
+                    cls:det.cls||'Unidentified', ev:det.ev||null, age:0,
+                };
+            }
+        }
+        for (const id of Object.keys(trackedObjs)) {
+            if (!activeIds.has(parseInt(id))) { trackedObjs[id].age++; if (trackedObjs[id].age > 6) delete trackedObjs[id]; }
+        }
+    });
+
+    // ---- Canvas render ----
+    const CLASS_COLORS = {
+        'Person':'16,185,129','Car':'59,130,246','Bus':'245,158,11',
+        'Motorcycle':'234,179,8','Bicycle':'6,182,212','Truck':'139,92,246',
+        'Unidentified':'148,163,184',
+    };
+    const EVENT_COLORS = {
+        DEFAULT: '192,192,192', // light silver
+        IN: '34,197,94',
+        OUT: '239,68,68',
+    };
+
+    function getBoxColor(o) {
+        if (o && o.ev === 'IN') return EVENT_COLORS.IN;
+        if (o && o.ev === 'OUT') return EVENT_COLORS.OUT;
+        return EVENT_COLORS.DEFAULT;
+    }
+
+    function drawGateGuides(c, dw, sy) {
+        const lines = (Array.isArray(gateLines) && gateLines.length)
+            ? gateLines
+            : [{ label: 'GATE', y: (lineY || frameH / 2), lvl: 0 }];
+
+        for (let i = 0; i < lines.length; i++) {
+            const ln = lines[i] || {};
+            const label = String(ln.label || 'GATE').toUpperCase();
+            const yy = (Number(ln.y) || 0) * sy;
+
+            let base = '148,163,184';
+            if (label === 'GATE') base = '99,102,241';
+            else if (label.startsWith('IN')) base = '34,197,94';
+            else if (label.startsWith('OUT')) base = '239,68,68';
+
+            const alpha = (label === 'GATE') ? 0.60 : 0.35;
+            c.strokeStyle = `rgba(${base},${alpha})`;
+            c.lineWidth = (label === 'GATE') ? 2 : 1;
+            c.beginPath();
+            c.moveTo(0, yy);
+            c.lineTo(dw, yy);
+            c.stroke();
+
+            const tw = c.measureText(label).width;
+            c.fillStyle = `rgba(${base},${0.88})`;
+            c.fillRect(6, yy - 8, tw + 10, 14);
+            c.fillStyle = 'rgba(255,255,255,0.95)';
+            c.textBaseline = 'middle';
+            c.fillText(label, 11, yy - 1);
+        }
+    }
+
+    function startRenderLoop() {
+        const canvas = document.getElementById('detectionCanvas');
+        const c = canvas.getContext('2d', {alpha: true});
+        let _cw = 0, _ch = 0;
+        const _font = '600 11px "JetBrains Mono",monospace';
+        function frame() {
+            rafId = requestAnimationFrame(frame);
+            const img = document.getElementById('streamImage');
+            if (!img || img.classList.contains('hidden')) return;
+            const rect = img.getBoundingClientRect();
+            const dw = (rect.width + 0.5) | 0, dh = (rect.height + 0.5) | 0;
+            if (_cw !== dw || _ch !== dh) { canvas.width = _cw = dw; canvas.height = _ch = dh; }
+            c.clearRect(0, 0, dw, dh);
+            if (!frameW || !frameH) return;
+            const sx = dw/frameW, sy = dh/frameH;
+
+            // Multi-line gate guides
+            drawGateGuides(c, dw, sy);
+
+            c.font = _font;
+            const ids = Object.keys(trackedObjs);
+            for (let i = 0; i < ids.length; i++) {
+                const id = ids[i], o = trackedObjs[id];
+                o.cx=lerp(o.cx,o.tx,LERP); o.cy=lerp(o.cy,o.ty,LERP);
+                o.x1=lerp(o.x1,o.tx1,LERP); o.y1=lerp(o.y1,o.ty1,LERP);
+                o.x2=lerp(o.x2,o.tx2,LERP); o.y2=lerp(o.y2,o.ty2,LERP);
+                const alpha = o.age > 0 ? Math.max(0, 1-o.age/6) : 1;
+                if (alpha <= 0) continue;
+
+                const bx1=o.x1*sx, by1=o.y1*sy, bw=(o.x2-o.x1)*sx, bh=(o.y2-o.y1)*sy;
+                const cc = getBoxColor(o);
+                const counted = (o.ev === 'IN' || o.ev === 'OUT');
+
+                // Simple box — no shadow, no corner brackets
+                c.strokeStyle=`rgba(${cc},${0.8*alpha})`; c.lineWidth=2;
+                c.strokeRect(bx1, by1, bw, bh);
+                if (counted) {
+                    c.fillStyle=`rgba(${cc},${0.16*alpha})`;
+                    c.fillRect(bx1, by1, bw, bh);
+                }
+
+                // Label pill
+                const label = counted ? `${o.ev} #${id}` : `${o.cls||'Unidentified'} #${id}`;
+                const tw = c.measureText(label).width;
+                const px=bx1, py=by1-16;
+                c.fillStyle=`rgba(${cc},${0.85*alpha})`;
+                c.fillRect(px, py, tw+10, 14);
+                c.fillStyle=`rgba(255,255,255,${0.9*alpha})`;
+                c.textBaseline='middle'; c.fillText(label, px+5, py+7);
+            }
+        }
+        frame();
+    }
+
+    // ---- Socket.IO: Stats data ----
+    socket.on('stats', d => {
+        if (activeCameraIndex === null) return;
+        // Cards below video
+        document.getElementById('statEntered').textContent = d.entered;
+        document.getElementById('statExited').textContent = d.exited;
+        document.getElementById('statInside').textContent = d.inside;
+        document.getElementById('thresholdDisplay').textContent = d.threshold;
+        // HUD overlay on video
+        document.getElementById('hudEntered').textContent = d.entered;
+        document.getElementById('hudExited').textContent = d.exited;
+        document.getElementById('hudInside').textContent = d.inside;
+        document.getElementById('hudThreshold').textContent = d.threshold;
+
+        document.getElementById('infoStatus').textContent = d.status;
+        document.getElementById('overlayTime').textContent =
+            new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}).toUpperCase();
+
+        if (d.threshold_exceeded) showAlert(); else hideAlert();
+        if (d.rush_detected) {
+            document.getElementById('rushBanner').classList.remove('hidden');
+            document.getElementById('rushCount').textContent = d.recent_entries;
+            document.getElementById('rushWindowLabel').textContent = d.rush_window;
+            if (!alertPlaying) { alertPlaying=true; playAlertSound(); }
+        } else { document.getElementById('rushBanner').classList.add('hidden'); }
+
+        if (d.status==='Detecting') setStatus('Detecting','blue');
+        else if (d.status==='Tracking') setStatus('Live','green');
+        updateTypeBreakdown(d.type_counts_in||{}, d.type_counts_out||{});
+        updateCampusVehicles(d.type_inside||{}, d.inside);
+        if (isFullscreen) updateFsStats(d);
+    });
+
+    // ---- Type breakdown ----
+    const TYPE_META = {
+        'Person':    {icon:'\u{1F6B6}', color:'16,185,129', bg:'#ecfdf5', hex:'#10b981'},
+        'Car':       {icon:'\u{1F697}', color:'59,130,246', bg:'#eff6ff', hex:'#3b82f6'},
+        'Bus':       {icon:'\u{1F68C}', color:'245,158,11', bg:'#fffbeb', hex:'#f59e0b'},
+        'Motorcycle':{icon:'\u{1F3CD}', color:'234,179,8',  bg:'#fefce8', hex:'#eab308'},
+        'Bicycle':   {icon:'\u{1F6B2}', color:'6,182,212',  bg:'#ecfeff', hex:'#06b6d4'},
+        'Truck':     {icon:'\u{1F69A}', color:'139,92,246', bg:'#f5f3ff', hex:'#8b5cf6'},
+    };
+    function updateTypeBreakdown(ci, co) {
+        const sec = document.getElementById('typeBreakdown'), g = document.getElementById('typeGrid');
+        let has = false; g.innerHTML = '';
+        for (const t of ['Person','Car','Bus','Motorcycle','Bicycle','Truck']) {
+            const i = ci[t]||0, o = co[t]||0;
+            if (!i && !o) continue; has = true;
+            const m = TYPE_META[t];
+            g.innerHTML += `<div class="rounded-lg p-2.5 text-center" style="background:${m.bg};border:1px solid rgba(${m.color},0.15)">
+                <p class="text-base mb-0.5">${m.icon}</p>
+                <p class="text-[11px] font-bold text-slate-700">${t}</p>
+                <div class="flex justify-center gap-2 mt-1">
+                    <span class="text-[10px] font-mono font-bold text-success-600">\u25B2${i}</span>
+                    <span class="text-[10px] font-mono font-bold text-danger-600">\u25BC${o}</span>
+                </div></div>`;
+        }
+        sec.classList.toggle('hidden', !has);
+    }
+
+    // ---- Currently in Campus ----
+    function updateCampusVehicles(typeInside, totalInside) {
+        const list = document.getElementById('campusList');
+        const totalEl = document.getElementById('campusTotal');
+        totalEl.textContent = totalInside;
+        const types = Object.keys(typeInside);
+        if (!types.length) {
+            list.innerHTML = '<p class="text-xs text-slate-400 italic py-3 text-center">No detections yet</p>';
+            return;
+        }
+        let html = '';
+        for (const t of ['Person','Car','Bus','Motorcycle','Bicycle','Truck']) {
+            const count = typeInside[t];
+            if (!count) continue;
+            const m = TYPE_META[t];
+            html += `<div class="campus-vehicle-row">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style="background:${m.bg}">${m.icon}</div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-slate-700">${t}${count>1?'s':''}</p>
+                    <p class="text-[10px] text-slate-400">Currently inside campus</p>
+                </div>
+                <span class="text-lg font-bold font-mono shrink-0" style="color:${m.hex}">${count}</span>
+            </div>`;
+        }
+        list.innerHTML = html;
+    }
+
+    // ---- Socket.IO: Chart data ----
+    socket.on('chart', data => {
+        if (activeCameraIndex === null) return;
+        occupancyChart.data.labels = data.map(d => d.time);
+        occupancyChart.data.datasets[0].data = data.map(d => d.count);
+        occupancyChart.update('none');
+    });
+
+    // ---- Video Adjust (Rotate / Flip) ----
+    let curRotation = 0, curFlipH = false, curFlipV = false;
+
+    async function sendTransform() {
+        if (activeCameraIndex === null) return;
+        await fetch(`/api/video_transform/${activeCameraIndex}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rotation: curRotation, flip_h: curFlipH, flip_v: curFlipV })
+        });
+        updateAdjustStatus();
+    }
+    function rotateVideo(deg) {
+        curRotation = (curRotation + deg) % 360;
+        sendTransform();
+    }
+    function flipVideo(axis) {
+        if (axis === 'h') curFlipH = !curFlipH;
+        else curFlipV = !curFlipV;
+        sendTransform();
+    }
+    function resetTransform() {
+        curRotation = 0; curFlipH = false; curFlipV = false;
+        sendTransform();
+    }
+    function updateAdjustStatus() {
+        const parts = [];
+        if (curRotation) parts.push(`Rot ${curRotation}°`);
+        if (curFlipH) parts.push('Flip H');
+        if (curFlipV) parts.push('Flip V');
+        const el = document.getElementById('adjustStatus');
+        if (el) {
+            el.textContent = parts.length ? parts.join(' · ') : 'No adjustments';
+        }
+    }
+
+    function updateThresholdLabel(val) {
+        document.getElementById('thresholdValue').textContent = val;
+        document.getElementById('thresholdDisplay').textContent = val;
+    }
+    async function setThreshold(val) {
+        await fetch('/api/threshold', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({threshold:parseInt(val)}) });
+    }
+    async function setRushLimit() {
+        const l = parseInt(document.getElementById('rushLimitSlider').value);
+        const w = parseInt(document.getElementById('rushWindowSlider').value);
+        document.getElementById('rushLimitLabel').textContent = l;
+        document.getElementById('rushWindowValue').textContent = w;
+        await fetch('/api/rush_limit', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({rush_limit:l, rush_window:w}) });
+    }
+</script>
+</body>
+</html>
