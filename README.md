@@ -187,6 +187,18 @@ if num_seconds > 28800:
 
 *saimj7/ 19-08-2020 - © <a href="http://saimj7.github.io" target="_blank">Sai_Mj</a>.*
 
+## Developer
+
+- **Name:** Shubham Dighe
+- **Year:** 2026
+- **License:** This project is created by and licensed to `Shubham Dighe`. See `LICENSE_SHUBHAM` for details.
+
+---
+
+*Maintainer contact: (not provided)*
+
+*Original project credits remain in this repository where applicable.*
+
 
 
 <!-- Stop all running project Python processes: -->
